@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Student, AttendanceRecord, AttendanceSummary } from '@/lib/types';
@@ -18,6 +17,7 @@ interface AppContextType {
   exportAttendance: (date?: string) => void;
   faceDetected: boolean;
   recognizedFace: string | null;
+  deleteTodayAttendance: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -192,6 +192,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     toast.success("Attendance exported successfully");
   };
 
+  // New function to delete today's attendance records
+  const deleteTodayAttendance = () => {
+    const today = new Date().toISOString().split('T')[0];
+    setAttendanceRecords(prev => prev.filter(record => record.date !== today));
+    toast.success("Today's attendance records have been deleted");
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -207,7 +214,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleRecognition,
         exportAttendance,
         faceDetected,
-        recognizedFace
+        recognizedFace,
+        deleteTodayAttendance
       }}
     >
       {children}

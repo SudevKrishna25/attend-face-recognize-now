@@ -1,10 +1,20 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useApp } from '@/context/AppContext';
-import { Camera, CheckCircle, UserCheck, Upload } from 'lucide-react';
+import { Camera, CheckCircle, UserCheck, Upload, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -16,7 +26,8 @@ const Recognition: React.FC = () => {
     recognitionActive,
     toggleWebcam, 
     toggleRecognition,
-    markAttendance
+    markAttendance,
+    deleteTodayAttendance
   } = useApp();
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -24,6 +35,7 @@ const Recognition: React.FC = () => {
   const [recognizedStudents, setRecognizedStudents] = useState<string[]>([]);
   const [faceDetected, setFaceDetected] = useState(false);
   const [processingFrame, setProcessingFrame] = useState(false);
+  const [faceDetectionStatus, setFaceDetectionStatus] = useState<'none' | 'detecting' | 'found'>('none');
   const today = format(new Date(), 'yyyy-MM-dd');
   
   // Initialize webcam when activated
@@ -68,6 +80,8 @@ const Recognition: React.FC = () => {
     if (!recognitionActive || !videoRef.current || !canvasRef.current) return;
     
     let animationFrame: number;
+    let lastFaceDetection = Date.now();
+    let consecutiveNoFaces = 0;
     const detectFaces = async () => {
       if (!videoRef.current || !canvasRef.current || processingFrame) return;
       
@@ -86,32 +100,48 @@ const Recognition: React.FC = () => {
         // Draw video frame to canvas
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // Here we would normally perform face detection using a library like face-api.js
-        // For this implementation, we'll simulate face detection
-        simulateFaceDetection(canvas).then(facesDetected => {
-          setFaceDetected(facesDetected.length > 0);
+        // More realistic face detection simulation
+        setFaceDetectionStatus('detecting');
+        
+        // Simulate processing time
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // For simulation, randomly detect faces with realistic patterns
+        const now = Date.now();
+        const timeSinceLastDetection = now - lastFaceDetection;
+        
+        // Ensure we don't switch too rapidly between detection states
+        const hasFace = simulateRealisticFaceDetection(consecutiveNoFaces);
+        
+        if (hasFace) {
+          consecutiveNoFaces = 0;
+          lastFaceDetection = now;
+          setFaceDetected(true);
+          setFaceDetectionStatus('found');
           
-          // If faces detected, try to recognize students
-          if (facesDetected.length > 0) {
-            facesDetected.forEach(face => {
-              const potentialMatches = students.filter(
-                student => !recognizedStudents.includes(student.id)
-              );
+          // Only attempt recognition if we have a stable face detection
+          if (timeSinceLastDetection > 1000) {
+            const potentialMatches = students.filter(
+              student => !recognizedStudents.includes(student.id)
+            );
+            
+            if (potentialMatches.length > 0 && Math.random() > 0.7) {
+              const randomIndex = Math.floor(Math.random() * potentialMatches.length);
+              const studentToRecognize = potentialMatches[randomIndex];
+              markAttendance(studentToRecognize.id, true);
+              setRecognizedStudents(prev => [...prev, studentToRecognize.id]);
               
-              if (potentialMatches.length > 0) {
-                // For simulation, randomly recognize a student every few seconds
-                if (Math.random() > 0.95) {
-                  const randomIndex = Math.floor(Math.random() * potentialMatches.length);
-                  const studentToRecognize = potentialMatches[randomIndex];
-                  markAttendance(studentToRecognize.id, true);
-                  setRecognizedStudents(prev => [...prev, studentToRecognize.id]);
-                }
-              }
-            });
+              // Add delay to simulate processing
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
           }
-          
-          setProcessingFrame(false);
-        });
+        } else {
+          consecutiveNoFaces++;
+          setFaceDetected(false);
+          setFaceDetectionStatus('none');
+        }
+        
+        setProcessingFrame(false);
       }
       
       animationFrame = requestAnimationFrame(detectFaces);
@@ -124,21 +154,18 @@ const Recognition: React.FC = () => {
     };
   }, [recognitionActive, students, recognizedStudents, markAttendance, processingFrame]);
   
-  // Simulate face detection
-  const simulateFaceDetection = async (canvas: HTMLCanvasElement): Promise<any[]> => {
-    // This is a placeholder for actual face detection
-    // In a real app, you would use a library like face-api.js here
-    
-    // For now, just simulate detecting faces randomly
-    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate processing time
-    
-    if (Math.random() > 0.2) {
-      // Simulate detecting 1-2 faces
-      const faceCount = Math.floor(Math.random() * 2) + 1;
-      return Array(faceCount).fill({ detection: { box: { x: 100, y: 100, width: 100, height: 100 } } });
+  // Simulate more realistic face detection
+  const simulateRealisticFaceDetection = (consecutiveNoFaces: number): boolean => {
+    // The longer we've gone without seeing a face, the less likely we are to suddenly detect one
+    if (consecutiveNoFaces > 10) {
+      return Math.random() > 0.95; // Only 5% chance to detect a face after long absence
+    } else if (faceDetected) {
+      // If we already detected a face, high chance to keep detecting it (stability)
+      return Math.random() > 0.1; // 90% chance to maintain detection
+    } else {
+      // Normal detection probability
+      return Math.random() > 0.6; // 40% chance to detect a new face
     }
-    
-    return [];
   };
   
   // Get today's attendance
@@ -171,38 +198,43 @@ const Recognition: React.FC = () => {
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
         
-        // Simulate face detection on the loaded image
+        // More realistic face detection on image
         try {
           // In a real app, you would use actual face recognition here
-          // For simulation, we'll randomly select 1-3 students
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate processing time
+          await new Promise(resolve => setTimeout(resolve, 1500)); // Longer simulation time
           
-          const count = Math.floor(Math.random() * 3) + 1;
-          const notYetRecognized = students.filter(
-            student => !recognizedStudents.includes(student.id)
-          );
-          
-          const toRecognize = notYetRecognized.slice(0, count);
-          
-          if (toRecognize.length === 0) {
+          // Improved image detection simulator - 30% chance of no faces
+          if (Math.random() > 0.3) {
+            const count = Math.floor(Math.random() * 3) + 1;
+            const notYetRecognized = students.filter(
+              student => !recognizedStudents.includes(student.id)
+            );
+            
+            const toRecognize = notYetRecognized.slice(0, count);
+            
+            if (toRecognize.length === 0) {
+              toast.dismiss(loadingToast);
+              toast.info("No new students recognized in the image");
+              return;
+            }
+            
+            // Mark selected students as present
+            toRecognize.forEach(student => {
+              markAttendance(student.id, true);
+            });
+            
+            // Update recognized students list
+            setRecognizedStudents(prev => [
+              ...prev,
+              ...toRecognize.map(student => student.id)
+            ]);
+            
             toast.dismiss(loadingToast);
-            toast.info("No new students recognized in the image");
-            return;
+            toast.success(`Recognized ${toRecognize.length} student(s) in the image`);
+          } else {
+            toast.dismiss(loadingToast);
+            toast.error("No faces detected in the uploaded image");
           }
-          
-          // Mark selected students as present
-          toRecognize.forEach(student => {
-            markAttendance(student.id, true);
-          });
-          
-          // Update recognized students list
-          setRecognizedStudents(prev => [
-            ...prev,
-            ...toRecognize.map(student => student.id)
-          ]);
-          
-          toast.dismiss(loadingToast);
-          toast.success(`Recognized ${toRecognize.length} student(s) in the image`);
         } catch (error) {
           console.error('Face detection error:', error);
           toast.dismiss(loadingToast);
@@ -232,6 +264,28 @@ const Recognition: React.FC = () => {
           >
             {recognitionActive ? "Stop Recognition" : "Start Recognition"}
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="flex gap-2">
+                <Trash2 className="h-4 w-4" />
+                Delete Today's Data
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Today's Attendance Records?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action will remove all attendance records for today. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={deleteTodayAttendance}>
+                  Delete Records
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
       
@@ -269,7 +323,8 @@ const Recognition: React.FC = () => {
                         
                         {recognitionActive && (
                           <div className="absolute top-4 right-4 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                            {faceDetected ? 'Face Detected' : 'No Face Detected'}
+                            {faceDetectionStatus === 'found' ? 'Face Detected' : 
+                             faceDetectionStatus === 'detecting' ? 'Scanning...' : 'No Face Detected'}
                           </div>
                         )}
                       </>
@@ -344,7 +399,7 @@ const Recognition: React.FC = () => {
             <CardContent>
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-4">
-                  <div className="border-2 border-dashed border-muted-foreground/20 rounded-md p-8 flex flex-col items-center justify-center">
+                  <div className="border-2 border-dashed border-muted-foreground/20 rounded-md p-8 flex flex-col items-center justify-center relative">
                     <Upload className="h-12 w-12 text-muted-foreground/50 mb-4" />
                     <div className="text-center">
                       <p className="font-medium">Click to upload an image</p>
