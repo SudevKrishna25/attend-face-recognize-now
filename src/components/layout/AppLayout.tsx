@@ -9,7 +9,8 @@ import {
   User,
   Users,
   Calendar,
-  Camera
+  Camera,
+  FileBarChart
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -50,6 +51,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     { href: '/register', icon: User, label: 'Register' },
     { href: '/recognition', icon: Camera, label: 'Recognition' },
     { href: '/students', icon: Users, label: 'Students' },
+    { href: '/report', icon: FileBarChart, label: 'Report' },
   ];
 
   return (

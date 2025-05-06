@@ -10,6 +10,7 @@ import Dashboard from "@/pages/Dashboard";
 import Register from "@/pages/Register";
 import Recognition from "@/pages/Recognition";
 import Students from "@/pages/Students";
+import Report from "@/pages/Report";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
               <Route path="/register" element={<Register />} />
               <Route path="/recognition" element={<Recognition />} />
               <Route path="/students" element={<Students />} />
+              <Route path="/report" element={<Report />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppLayout>
