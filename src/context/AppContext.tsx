@@ -1,8 +1,7 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Student, AttendanceRecord, AttendanceSummary } from '@/lib/types';
-import { mockStudents, mockAttendanceRecords, mockAttendanceSummary } from '@/lib/mock-data';
 import { toast } from 'sonner';
 
 interface AppContextType {
@@ -17,16 +16,56 @@ interface AppContextType {
   toggleWebcam: () => void;
   toggleRecognition: () => void;
   exportAttendance: (date?: string) => void;
+  faceDetected: boolean;
+  recognizedFace: string | null;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [students, setStudents] = useState<Student[]>(mockStudents);
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(mockAttendanceRecords);
-  const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary[]>(mockAttendanceSummary);
+  // State
+  const [students, setStudents] = useState<Student[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary[]>([]);
   const [webcamActive, setWebcamActive] = useState(false);
   const [recognitionActive, setRecognitionActive] = useState(false);
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [recognizedFace, setRecognizedFace] = useState<string | null>(null);
+  
+  // Load data from local storage on app initialization
+  useEffect(() => {
+    const loadedStudents = localStorage.getItem('students');
+    const loadedAttendance = localStorage.getItem('attendanceRecords');
+    
+    if (loadedStudents) {
+      try {
+        setStudents(JSON.parse(loadedStudents));
+      } catch (error) {
+        console.error('Failed to parse students from localStorage:', error);
+      }
+    }
+    
+    if (loadedAttendance) {
+      try {
+        setAttendanceRecords(JSON.parse(loadedAttendance));
+      } catch (error) {
+        console.error('Failed to parse attendance from localStorage:', error);
+      }
+    }
+  }, []);
+  
+  // Save data to local storage when it changes
+  useEffect(() => {
+    if (students.length > 0) {
+      localStorage.setItem('students', JSON.stringify(students));
+    }
+  }, [students]);
+  
+  useEffect(() => {
+    if (attendanceRecords.length > 0) {
+      localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords));
+    }
+  }, [attendanceRecords]);
 
   // Update attendance summary whenever attendance records change
   useEffect(() => {
@@ -103,6 +142,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     
     if (present) {
+      setRecognizedFace(student.name);
+      setTimeout(() => setRecognizedFace(null), 3000);
       toast.success(`Attendance marked for ${student.name}`);
     }
   };
@@ -165,6 +206,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleWebcam,
         toggleRecognition,
         exportAttendance,
+        faceDetected,
+        recognizedFace
       }}
     >
       {children}

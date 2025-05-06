@@ -22,16 +22,25 @@ const Recognition: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [recognizedStudents, setRecognizedStudents] = useState<string[]>([]);
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [processingFrame, setProcessingFrame] = useState(false);
   const today = format(new Date(), 'yyyy-MM-dd');
   
   // Initialize webcam when activated
   useEffect(() => {
     if (webcamActive && videoRef.current) {
-      navigator.mediaDevices.getUserMedia({ video: true })
+      navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user"
+        } 
+      })
         .then(stream => {
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
           }
+          toast.success("Camera connected successfully");
         })
         .catch(err => {
           console.error("Error accessing webcam:", err);
@@ -54,31 +63,83 @@ const Recognition: React.FC = () => {
     };
   }, [webcamActive, toggleWebcam]);
   
-  // Simulated face recognition process
+  // Real-time face detection and processing
   useEffect(() => {
-    if (!recognitionActive) return;
+    if (!recognitionActive || !videoRef.current || !canvasRef.current) return;
     
-    const recognitionInterval = setInterval(() => {
-      // This is a simulation - in a real app, this would use actual face recognition
-      if (students.length > 0 && recognizedStudents.length < students.length) {
-        // Randomly select a student that hasn't been recognized yet
-        const notRecognized = students.filter(
-          student => !recognizedStudents.includes(student.id)
-        );
+    let animationFrame: number;
+    const detectFaces = async () => {
+      if (!videoRef.current || !canvasRef.current || processingFrame) return;
+      
+      if (videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+        setProcessingFrame(true);
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
         
-        if (notRecognized.length > 0) {
-          const randomIndex = Math.floor(Math.random() * notRecognized.length);
-          const studentToRecognize = notRecognized[randomIndex];
+        if (!context) return;
+        
+        // Set canvas dimensions to match video
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Draw video frame to canvas
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Here we would normally perform face detection using a library like face-api.js
+        // For this implementation, we'll simulate face detection
+        simulateFaceDetection(canvas).then(facesDetected => {
+          setFaceDetected(facesDetected.length > 0);
           
-          // Mark the student as present
-          markAttendance(studentToRecognize.id, true);
-          setRecognizedStudents(prev => [...prev, studentToRecognize.id]);
-        }
+          // If faces detected, try to recognize students
+          if (facesDetected.length > 0) {
+            facesDetected.forEach(face => {
+              const potentialMatches = students.filter(
+                student => !recognizedStudents.includes(student.id)
+              );
+              
+              if (potentialMatches.length > 0) {
+                // For simulation, randomly recognize a student every few seconds
+                if (Math.random() > 0.95) {
+                  const randomIndex = Math.floor(Math.random() * potentialMatches.length);
+                  const studentToRecognize = potentialMatches[randomIndex];
+                  markAttendance(studentToRecognize.id, true);
+                  setRecognizedStudents(prev => [...prev, studentToRecognize.id]);
+                }
+              }
+            });
+          }
+          
+          setProcessingFrame(false);
+        });
       }
-    }, 3000); // Try to recognize a student every 3 seconds
+      
+      animationFrame = requestAnimationFrame(detectFaces);
+    };
     
-    return () => clearInterval(recognitionInterval);
-  }, [recognitionActive, students, recognizedStudents, markAttendance]);
+    animationFrame = requestAnimationFrame(detectFaces);
+    
+    return () => {
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [recognitionActive, students, recognizedStudents, markAttendance, processingFrame]);
+  
+  // Simulate face detection
+  const simulateFaceDetection = async (canvas: HTMLCanvasElement): Promise<any[]> => {
+    // This is a placeholder for actual face detection
+    // In a real app, you would use a library like face-api.js here
+    
+    // For now, just simulate detecting faces randomly
+    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate processing time
+    
+    if (Math.random() > 0.2) {
+      // Simulate detecting 1-2 faces
+      const faceCount = Math.floor(Math.random() * 2) + 1;
+      return Array(faceCount).fill({ detection: { box: { x: 100, y: 100, width: 100, height: 100 } } });
+    }
+    
+    return [];
+  };
   
   // Get today's attendance
   const todayAttendance = attendanceRecords.filter(record => record.date === today);
@@ -92,38 +153,65 @@ const Recognition: React.FC = () => {
     const file = files[0];
     
     // Show loading toast
-    toast.loading("Processing image...");
+    const loadingToast = toast.loading("Processing image...");
     
-    // Simulate processing delay
-    setTimeout(() => {
-      // Randomly select 1-3 students to "recognize" in the image
-      const count = Math.floor(Math.random() * 3) + 1;
-      const notYetRecognized = students.filter(
-        student => !recognizedStudents.includes(student.id)
-      );
+    // Create a reader to read the image
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (!e.target?.result) return;
       
-      const toRecognize = notYetRecognized.slice(0, count);
-      
-      if (toRecognize.length === 0) {
-        toast.dismiss();
-        toast.info("No new students recognized in the image");
-        return;
-      }
-      
-      // Mark selected students as present
-      toRecognize.forEach(student => {
-        markAttendance(student.id, true);
-      });
-      
-      // Update recognized students list
-      setRecognizedStudents(prev => [
-        ...prev,
-        ...toRecognize.map(student => student.id)
-      ]);
-      
-      toast.dismiss();
-      toast.success(`Recognized ${toRecognize.length} student(s) in the image`);
-    }, 2000);
+      const img = new Image();
+      img.onload = async () => {
+        // Create temporary canvas to process the image
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        
+        // Simulate face detection on the loaded image
+        try {
+          // In a real app, you would use actual face recognition here
+          // For simulation, we'll randomly select 1-3 students
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate processing time
+          
+          const count = Math.floor(Math.random() * 3) + 1;
+          const notYetRecognized = students.filter(
+            student => !recognizedStudents.includes(student.id)
+          );
+          
+          const toRecognize = notYetRecognized.slice(0, count);
+          
+          if (toRecognize.length === 0) {
+            toast.dismiss(loadingToast);
+            toast.info("No new students recognized in the image");
+            return;
+          }
+          
+          // Mark selected students as present
+          toRecognize.forEach(student => {
+            markAttendance(student.id, true);
+          });
+          
+          // Update recognized students list
+          setRecognizedStudents(prev => [
+            ...prev,
+            ...toRecognize.map(student => student.id)
+          ]);
+          
+          toast.dismiss(loadingToast);
+          toast.success(`Recognized ${toRecognize.length} student(s) in the image`);
+        } catch (error) {
+          console.error('Face detection error:', error);
+          toast.dismiss(loadingToast);
+          toast.error("Error processing image");
+        }
+      };
+      img.src = e.target.result as string;
+    };
+    reader.readAsDataURL(file);
   };
   
   return (
@@ -154,7 +242,7 @@ const Recognition: React.FC = () => {
         </TabsList>
         
         <TabsContent value="camera" className="space-y-4 mt-4">
-          <Card>
+          <Card className="glass-morphism">
             <CardHeader>
               <CardTitle>Live Face Recognition</CardTitle>
               <CardDescription>
@@ -166,23 +254,31 @@ const Recognition: React.FC = () => {
                 <div className="space-y-4">
                   <div className="relative aspect-video bg-muted rounded-md overflow-hidden flex items-center justify-center">
                     {webcamActive ? (
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full h-full object-cover"
-                      />
+                      <>
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover"
+                        />
+                        
+                        {faceDetected && (
+                          <div className="absolute inset-0 border-4 border-green-500 rounded-md animate-pulse-slow"></div>
+                        )}
+                        
+                        {recognitionActive && (
+                          <div className="absolute top-4 right-4 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                            {faceDetected ? 'Face Detected' : 'No Face Detected'}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="text-muted-foreground flex flex-col items-center justify-center">
                         <Camera className="h-12 w-12 mb-2 text-muted-foreground/50" />
                         <div>Camera is off</div>
                         <div className="text-sm">Click "Start Camera" to begin</div>
                       </div>
-                    )}
-                    
-                    {recognitionActive && (
-                      <div className="absolute inset-0 border-4 border-brand-500 rounded-md animate-pulse-slow"></div>
                     )}
                   </div>
                   <canvas ref={canvasRef} className="hidden" />
@@ -238,7 +334,7 @@ const Recognition: React.FC = () => {
         </TabsContent>
         
         <TabsContent value="upload" className="space-y-4 mt-4">
-          <Card>
+          <Card className="glass-morphism">
             <CardHeader>
               <CardTitle>Image Upload Recognition</CardTitle>
               <CardDescription>

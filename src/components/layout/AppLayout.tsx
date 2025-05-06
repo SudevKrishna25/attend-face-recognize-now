@@ -26,8 +26,8 @@ const NavItem = ({ href, icon: Icon, label, isActive }: NavItemProps) => {
       <Button
         variant="ghost"
         className={cn(
-          "w-full justify-start gap-2 my-1",
-          isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent hover:text-accent-foreground"
+          "w-full justify-start gap-2 my-1 text-sidebar-foreground",
+          isActive ? "bg-sidebar-accent text-accent-foreground" : "hover:bg-sidebar-accent hover:text-accent-foreground"
         )}
       >
         <Icon className="h-4 w-4" />
@@ -53,15 +53,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   ];
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-background">
       {/* Sidebar */}
       <div
         className={cn(
-          "h-screen bg-card border-r border-border transition-all duration-300 flex flex-col",
+          "h-screen bg-sidebar-background border-r border-sidebar-border transition-all duration-300 flex flex-col",
           collapsed ? "w-16" : "w-64"
         )}
       >
-        <div className="p-4 flex items-center justify-between">
+        <div className="p-4 flex items-center justify-between text-sidebar-foreground">
           {!collapsed && (
             <h1 className="text-xl font-bold tracking-tight">Attend<span className="text-brand-500">Face</span></h1>
           )}
@@ -69,12 +69,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             variant="ghost" 
             size="icon" 
             onClick={() => setCollapsed(!collapsed)}
-            className="ml-auto"
+            className="ml-auto text-sidebar-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent"
           >
             {collapsed ? <ArrowRight className="h-4 w-4" /> : <ArrowLeft className="h-4 w-4" />}
           </Button>
         </div>
-        <Separator />
+        <Separator className="bg-sidebar-border" />
         <div className="flex-1 overflow-auto p-2">
           <nav className="space-y-1 mt-2">
             {navItems.map((item) => (
@@ -88,10 +88,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             ))}
           </nav>
         </div>
-        <Separator />
+        <Separator className="bg-sidebar-border" />
         <div className="p-4">
           {!collapsed && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-sidebar-foreground/60">
               AttendFace v1.0
             </p>
           )}
@@ -99,7 +99,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col h-screen overflow-auto">
+      <div className="flex-1 flex flex-col h-screen overflow-auto bg-background text-foreground">
         <main className="flex-1 p-6">
           {children}
         </main>
