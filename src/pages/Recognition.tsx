@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,6 +37,7 @@ const Recognition: React.FC = () => {
   const [faceDetected, setFaceDetected] = useState(false);
   const [processingFrame, setProcessingFrame] = useState(false);
   const [faceDetectionStatus, setFaceDetectionStatus] = useState<'none' | 'detecting' | 'found'>('none');
+  const [lastProcessTime, setLastProcessTime] = useState(0);
   const today = format(new Date(), 'yyyy-MM-dd');
   
   // Initialize webcam when activated
@@ -64,6 +66,8 @@ const Recognition: React.FC = () => {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
       tracks.forEach(track => track.stop());
       videoRef.current.srcObject = null;
+      setFaceDetected(false);
+      setFaceDetectionStatus('none');
     }
     
     return () => {
@@ -75,18 +79,34 @@ const Recognition: React.FC = () => {
     };
   }, [webcamActive, toggleWebcam]);
   
-  // Real-time face detection and processing
+  // Reset recognized students list when recognition is toggled off
+  useEffect(() => {
+    if (!recognitionActive) {
+      setRecognizedStudents([]);
+    }
+  }, [recognitionActive]);
+  
+  // Real-time face detection and processing with improved realism
   useEffect(() => {
     if (!recognitionActive || !videoRef.current || !canvasRef.current) return;
     
     let animationFrame: number;
-    let lastFaceDetection = Date.now();
-    let consecutiveNoFaces = 0;
+    const processInterval = 500; // Process every 500ms for better performance
+    
     const detectFaces = async () => {
       if (!videoRef.current || !canvasRef.current || processingFrame) return;
       
+      const now = Date.now();
+      // Only process frames at specified interval
+      if (now - lastProcessTime < processInterval) {
+        animationFrame = requestAnimationFrame(detectFaces);
+        return;
+      }
+      
+      setLastProcessTime(now);
+      setProcessingFrame(true);
+      
       if (videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-        setProcessingFrame(true);
         const video = videoRef.current;
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
@@ -100,45 +120,51 @@ const Recognition: React.FC = () => {
         // Draw video frame to canvas
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        // More realistic face detection simulation
+        // Improved face detection simulation
         setFaceDetectionStatus('detecting');
         
-        // Simulate processing time
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // For simulation, randomly detect faces with realistic patterns
-        const now = Date.now();
-        const timeSinceLastDetection = now - lastFaceDetection;
-        
-        // Ensure we don't switch too rapidly between detection states
-        const hasFace = simulateRealisticFaceDetection(consecutiveNoFaces);
-        
-        if (hasFace) {
-          consecutiveNoFaces = 0;
-          lastFaceDetection = now;
-          setFaceDetected(true);
-          setFaceDetectionStatus('found');
+        try {
+          // Simulate processing with realistic timing
+          await new Promise(resolve => setTimeout(resolve, 200));
           
-          // Only attempt recognition if we have a stable face detection
-          if (timeSinceLastDetection > 1000) {
-            const potentialMatches = students.filter(
-              student => !recognizedStudents.includes(student.id)
-            );
+          // Get image data for analysis
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          
+          // Advanced simulation: analyze pixel data for face-like patterns
+          // In a real app, this would use a face detection library
+          const hasFace = detectFaceInImageData(imageData);
+          
+          if (hasFace) {
+            console.log("Face detected in frame");
+            setFaceDetected(true);
+            setFaceDetectionStatus('found');
             
-            if (potentialMatches.length > 0 && Math.random() > 0.7) {
-              const randomIndex = Math.floor(Math.random() * potentialMatches.length);
-              const studentToRecognize = potentialMatches[randomIndex];
-              markAttendance(studentToRecognize.id, true);
-              setRecognizedStudents(prev => [...prev, studentToRecognize.id]);
+            // Only attempt recognition every few frames to avoid too many recognitions
+            if (Math.random() > 0.7) {
+              const potentialMatches = students.filter(
+                student => !recognizedStudents.includes(student.id)
+              );
               
-              // Add delay to simulate processing
-              await new Promise(resolve => setTimeout(resolve, 500));
+              if (potentialMatches.length > 0) {
+                // In a real app, this would compare face encodings
+                // Here we select a random student to simulate recognition
+                const randomIndex = Math.floor(Math.random() * potentialMatches.length);
+                const studentToRecognize = potentialMatches[randomIndex];
+                markAttendance(studentToRecognize.id, true);
+                setRecognizedStudents(prev => [...prev, studentToRecognize.id]);
+                
+                // Add delay to simulate processing
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
             }
+          } else {
+            console.log("No face detected in frame");
+            setFaceDetected(false);
+            setFaceDetectionStatus('none');
           }
-        } else {
-          consecutiveNoFaces++;
-          setFaceDetected(false);
-          setFaceDetectionStatus('none');
+        } catch (error) {
+          console.error("Error in face detection:", error);
+          toast.error("Error processing video frame");
         }
         
         setProcessingFrame(false);
@@ -152,27 +178,74 @@ const Recognition: React.FC = () => {
     return () => {
       cancelAnimationFrame(animationFrame);
     };
-  }, [recognitionActive, students, recognizedStudents, markAttendance, processingFrame]);
+  }, [recognitionActive, students, recognizedStudents, markAttendance, processingFrame, lastProcessTime]);
   
-  // Simulate more realistic face detection
-  const simulateRealisticFaceDetection = (consecutiveNoFaces: number): boolean => {
-    // The longer we've gone without seeing a face, the less likely we are to suddenly detect one
-    if (consecutiveNoFaces > 10) {
-      return Math.random() > 0.95; // Only 5% chance to detect a face after long absence
-    } else if (faceDetected) {
-      // If we already detected a face, high chance to keep detecting it (stability)
-      return Math.random() > 0.1; // 90% chance to maintain detection
-    } else {
-      // Normal detection probability
-      return Math.random() > 0.6; // 40% chance to detect a new face
+  // Improved face detection simulation that analyzes image data
+  const detectFaceInImageData = (imageData: ImageData): boolean => {
+    // This is a simplified simulation of face detection
+    // In a real app, you would use a face detection library like face-api.js, 
+    // TensorFlow.js or connect to a backend API
+    
+    const data = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    
+    // Check if there's sufficient light in the image (not just black)
+    let totalBrightness = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      // Calculate brightness
+      totalBrightness += (r + g + b) / 3;
     }
+    
+    const avgBrightness = totalBrightness / (width * height);
+    if (avgBrightness < 20) {
+      console.log("Image too dark, brightness:", avgBrightness);
+      return false; // Image too dark
+    }
+    
+    // Look for skin-tone like colors in the center region of the image
+    // This is a very basic approach; real face detection is much more complex
+    const centerRegion = {
+      x: Math.floor(width * 0.25),
+      y: Math.floor(height * 0.1),
+      width: Math.floor(width * 0.5),
+      height: Math.floor(height * 0.8)
+    };
+    
+    let skinTonePixels = 0;
+    let totalPixels = 0;
+    
+    for (let y = centerRegion.y; y < centerRegion.y + centerRegion.height; y += 5) {
+      for (let x = centerRegion.x; x < centerRegion.x + centerRegion.width; x += 5) {
+        const idx = (y * width + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        
+        // Very basic skin tone detection
+        if (r > 60 && g > 40 && b > 20 && 
+            r > g && g > b && 
+            r - g > 15 && g - b > 15) {
+          skinTonePixels++;
+        }
+        totalPixels++;
+      }
+    }
+    
+    const skinRatio = skinTonePixels / totalPixels;
+    console.log("Skin tone ratio:", skinRatio);
+    
+    // Variation based on time to create more realistic behavior
+    const timeVariation = Math.sin(Date.now() / 1000) * 0.15 + 0.8;
+    
+    // Determine if a face is present based on our simplified detection
+    return skinRatio > 0.04 * timeVariation && Math.random() > 0.2;
   };
   
-  // Get today's attendance
-  const todayAttendance = attendanceRecords.filter(record => record.date === today);
-  const presentStudents = todayAttendance.filter(record => record.present);
-  
-  // Handle image upload
+  // Handle image upload with improved detection
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -185,38 +258,59 @@ const Recognition: React.FC = () => {
     // Create a reader to read the image
     const reader = new FileReader();
     reader.onload = (e) => {
-      if (!e.target?.result) return;
+      if (!e.target?.result) {
+        toast.dismiss(loadingToast);
+        toast.error("Failed to read image");
+        return;
+      }
       
       const img = new Image();
       img.onload = async () => {
         // Create temporary canvas to process the image
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        if (!ctx) {
+          toast.dismiss(loadingToast);
+          toast.error("Could not process image");
+          return;
+        }
         
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
         
-        // More realistic face detection on image
         try {
-          // In a real app, you would use actual face recognition here
-          await new Promise(resolve => setTimeout(resolve, 1500)); // Longer simulation time
+          // Get image data for analysis
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           
-          // Improved image detection simulator - 30% chance of no faces
-          if (Math.random() > 0.3) {
-            const count = Math.floor(Math.random() * 3) + 1;
+          // More realistic detection
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate processing time
+          
+          const hasFaces = detectFaceInImageData(imageData);
+          
+          if (hasFaces) {
+            // Calculate how many faces to detect based on image size
+            // In a real app this would come from actual face detection
+            const imageSizeScore = Math.min(1, (img.width * img.height) / (1280 * 720));
+            const maxDetections = Math.min(
+              Math.floor(imageSizeScore * 3) + 1, 
+              students.length - recognizedStudents.length
+            );
+            
+            if (maxDetections <= 0) {
+              toast.dismiss(loadingToast);
+              toast.info("All students have already been recognized");
+              return;
+            }
+            
+            // Select students to recognize
             const notYetRecognized = students.filter(
               student => !recognizedStudents.includes(student.id)
             );
             
-            const toRecognize = notYetRecognized.slice(0, count);
-            
-            if (toRecognize.length === 0) {
-              toast.dismiss(loadingToast);
-              toast.info("No new students recognized in the image");
-              return;
-            }
+            // Randomly determine how many faces to recognize (at least 1, at most maxDetections)
+            const detectionCount = Math.max(1, Math.floor(Math.random() * maxDetections));
+            const toRecognize = notYetRecognized.slice(0, detectionCount);
             
             // Mark selected students as present
             toRecognize.forEach(student => {
@@ -241,10 +335,26 @@ const Recognition: React.FC = () => {
           toast.error("Error processing image");
         }
       };
+      
+      img.onerror = () => {
+        toast.dismiss(loadingToast);
+        toast.error("Failed to load image");
+      };
+      
       img.src = e.target.result as string;
     };
+    
+    reader.onerror = () => {
+      toast.dismiss(loadingToast);
+      toast.error("Failed to read file");
+    };
+    
     reader.readAsDataURL(file);
   };
+  
+  // Get today's attendance
+  const todayAttendance = attendanceRecords.filter(record => record.date === today);
+  const presentStudents = todayAttendance.filter(record => record.present);
   
   return (
     <div className="space-y-6 animate-fade-in">

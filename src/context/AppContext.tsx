@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Student, AttendanceRecord, AttendanceSummary } from '@/lib/types';
@@ -86,6 +87,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAttendanceSummary(summary);
   }, [attendanceRecords, students.length]);
 
+  // Reset recognition state when recognition is toggled off
+  useEffect(() => {
+    if (!recognitionActive) {
+      setFaceDetected(false);
+      setRecognizedFace(null);
+    }
+  }, [recognitionActive]);
+
   const addStudent = (student: Omit<Student, 'id' | 'registeredAt'>) => {
     const newStudent: Student = {
       ...student,
@@ -150,6 +159,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toggleWebcam = () => {
     setWebcamActive(prev => !prev);
+    // When turning off webcam, also turn off recognition
+    if (webcamActive) {
+      setRecognitionActive(false);
+    }
   };
 
   const toggleRecognition = () => {
@@ -192,7 +205,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     toast.success("Attendance exported successfully");
   };
 
-  // New function to delete today's attendance records
+  // Function to delete today's attendance records
   const deleteTodayAttendance = () => {
     const today = new Date().toISOString().split('T')[0];
     setAttendanceRecords(prev => prev.filter(record => record.date !== today));
